@@ -5,7 +5,7 @@ require('dotenv').config();
 // === CONFIG ===
 const SUPPORT_ROLE_ID = '1307299081676263444'; // Support role ID
 const TICKET_CATEGORY_ID = 'YOUR_CATEGORY_ID_HERE'; // Ticket category ID
-const OWNER_ID = 'YOUR_USER_ID_HERE'; // Bot owner for status command
+const OWNER_ID = 'YOUR_DISCORD_USER_ID'; // Your Discord ID for /status
 
 // === CLIENT ===
 const client = new Client({
@@ -16,7 +16,7 @@ const client = new Client({
     ],
 });
 
-// === READY EVENT & GUILD SLASH COMMANDS ===
+// === READY EVENT & REGISTER GUILD SLASH COMMANDS ===
 client.once(Events.ClientReady, async () => {
     console.log(`Logged in as ${client.user.tag}`);
 
@@ -47,12 +47,11 @@ client.once(Events.ClientReady, async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
     try {
-        console.log('Registering guild commands...');
         await rest.put(
             Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
             { body: commands }
         );
-        console.log('✅ Guild commands registered successfully!');
+        console.log('✅ Slash commands registered!');
     } catch (error) {
         console.error('Error registering commands:', error);
     }
@@ -79,6 +78,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (commandName === 'sendpanel') {
             try {
                 const channel = interaction.options.getChannel('channel');
+
+                if (!channel.permissionsFor(interaction.guild.members.me).has(PermissionsBitField.Flags.SendMessages)) {
+                    return interaction.reply({ content: '❌ I do not have permission to send messages in that channel.', ephemeral: true });
+                }
+
                 const panelEmbed = new EmbedBuilder()
                     .setTitle('Ticket Support Panel')
                     .setDescription(`Please open a ticket if there is any problem. Our <@&${SUPPORT_ROLE_ID}> will assist you promptly and effectively.\n\nClick the button below to open your ticket.`)
@@ -101,9 +105,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         if (commandName === 'status') {
-            if (interaction.user.id !== OWNER_ID) {
-                return interaction.reply({ content: '❌ Only the bot owner can change status.', ephemeral: true });
-            }
+            if (interaction.user.id !== OWNER_ID) return interaction.reply({ content: '❌ Only the bot owner can change status.', ephemeral: true });
 
             const type = interaction.options.getString('type').toLowerCase();
             const text = interaction.options.getString('text');
@@ -126,7 +128,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 // === BUTTON HANDLER ===
 client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isButton()) return;
-
     const { customId, guild, user } = interaction;
 
     // === CREATE TICKET ===
@@ -134,6 +135,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
         try {
             await interaction.deferReply({ ephemeral: true });
 
+            // Permission check
+            const botMember = guild.members.me;
+            if (!botMember.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+                return await interaction.editReply('❌ I need Manage Channels permission to create tickets.');
+            }
+
+            // Check category
+            const category = guild.channels.cache.get(TICKET_CATEGORY_ID);
+            if (!category || category.type !== 4) { // 4 = category
+                return await interaction.editReply('❌ Invalid ticket category ID.');
+            }
+
+            // Create ticket channel
             const ticketChannel = await guild.channels.create({
                 name: `ticket-${user.username}`,
                 type: 0,
@@ -162,10 +176,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
             await ticketChannel.send({ content: `<@&${SUPPORT_ROLE_ID}>`, embeds: [ticketEmbed], components: [ticketButtons] });
             await interaction.editReply({ content: `🎫 Your ticket has been created: ${ticketChannel}` });
+
         } catch (error) {
             console.error(error);
             if (interaction.deferred || interaction.replied) {
-                await interaction.editReply({ content: '❌ Failed to create ticket. Check permissions and category ID.' });
+                await interaction.editReply('❌ Failed to create ticket. Check bot permissions and category ID.');
             } else {
                 await interaction.reply({ content: '❌ Failed to create ticket.', ephemeral: true });
             }
