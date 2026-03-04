@@ -1,58 +1,89 @@
-const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Events, PermissionsBitField } = require('discord.js');
-require('dotenv').config(); // Load environment variables
+const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Events, PermissionsBitField, REST, Routes, SlashCommandBuilder } = require('discord.js');
+require('dotenv').config();
 
 // === CONFIG ===
-const SUPPORT_ROLE_ID = '1307299081676263444'; // Replace with your support role ID
-const TICKET_CATEGORY_ID = 'YOUR_CATEGORY_ID_HERE'; // Replace with your ticket category ID
+const SUPPORT_ROLE_ID = '1307299081676263444'; // Support role
+const TICKET_CATEGORY_ID = 'YOUR_CATEGORY_ID_HERE'; // Ticket category
 
 // === CLIENT ===
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent, // required for message commands
+        GatewayIntentBits.MessageContent,
     ],
 });
 
 // === READY EVENT ===
-client.once(Events.ClientReady, () => {
+client.once(Events.ClientReady, async () => {
     console.log(`Logged in as ${client.user.tag}`);
+
+    // Register slash commands globally or to a guild for testing
+    const commands = [
+        new SlashCommandBuilder()
+            .setName('sendpanel')
+            .setDescription('Send the ticket panel in a specific channel')
+            .addChannelOption(option =>
+                option.setName('channel')
+                    .setDescription('Channel to send the ticket panel')
+                    .setRequired(true)
+            ),
+    ].map(cmd => cmd.toJSON());
+
+    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+
+    try {
+        console.log('Refreshing slash commands...');
+        await rest.put(
+            Routes.applicationCommands(process.env.CLIENT_ID),
+            { body: commands }
+        );
+        console.log('Slash commands registered.');
+    } catch (error) {
+        console.error(error);
+    }
 });
 
 // === MESSAGE COMMANDS ===
 client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
 
-    // Simple ping command
+    // Old commands
     if (message.content.toLowerCase() === 'ping') {
         message.channel.send('Pong!');
     }
 
-    // Simple ticket command (legacy)
     if (message.content.toLowerCase() === 'ticket') {
-        message.channel.send(`🎫 ${message.author}, please use the ticket panel to open a ticket with <#${TICKET_CATEGORY_ID}>`);
-    }
-
-    // Command to send the ticket panel
-    if (message.content.toLowerCase() === '!ticketpanel') {
-        const panelEmbed = new EmbedBuilder()
-            .setTitle('Ticket Support Panel')
-            .setDescription(`Please open a ticket if there is any problem. Our <@&${SUPPORT_ROLE_ID}> will assist you promptly and effectively.\n\nPlease click the button below to open your ticket.`)
-            .setColor('Blue')
-            .setFooter({ text: 'React with 📩 below to create a ticket' });
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('create_ticket')
-                .setLabel('📩 Create a Ticket')
-                .setStyle(ButtonStyle.Primary)
-        );
-
-        await message.channel.send({ embeds: [panelEmbed], components: [row] });
+        message.channel.send(`🎫 ${message.author}, please use the ticket panel to open a ticket.`);
     }
 });
 
-// === INTERACTION CREATE (BUTTONS) ===
+// === SLASH COMMANDS ===
+client.on(Events.InteractionCreate, async (interaction) => {
+    if (interaction.isChatInputCommand()) {
+        if (interaction.commandName === 'sendpanel') {
+            const channel = interaction.options.getChannel('channel');
+
+            const panelEmbed = new EmbedBuilder()
+                .setTitle('Ticket Support Panel')
+                .setDescription(`Please open a ticket if there is any problem. Our <@&${SUPPORT_ROLE_ID}> will assist you promptly and effectively.\n\nClick the button below to open your ticket.`)
+                .setColor('Blue')
+                .setFooter({ text: 'Click 📩 to create a ticket' });
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('create_ticket')
+                    .setLabel('📩 Create a Ticket')
+                    .setStyle(ButtonStyle.Primary)
+            );
+
+            await channel.send({ embeds: [panelEmbed], components: [row] });
+            await interaction.reply({ content: `✅ Ticket panel sent in ${channel}`, ephemeral: true });
+        }
+    }
+});
+
+// === BUTTONS INTERACTION ===
 client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isButton()) return;
 
@@ -82,7 +113,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const ticketEmbed = new EmbedBuilder()
             .setTitle('🎫 New Ticket')
-            .setDescription(`Thank you for reaching out! We’ve received your ticket and will assist you as quickly as possible. Could you please provide more details?`)
+            .setDescription('Thank you for reaching out! We’ve received your ticket and will assist you as quickly as possible. Please provide more details.')
             .addFields(
                 { name: 'Opened by', value: `<@${user.id}>`, inline: true },
                 { name: 'Claimed by', value: 'Not claimed', inline: true }
@@ -156,5 +187,5 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 });
 
-// LOGIN
+// === LOGIN ===
 client.login(process.env.TOKEN);
