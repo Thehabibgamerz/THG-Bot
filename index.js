@@ -1,9 +1,10 @@
+// index.js
 const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Events, PermissionsBitField, REST, Routes, SlashCommandBuilder } = require('discord.js');
 require('dotenv').config();
 
 // === CONFIG ===
-const SUPPORT_ROLE_ID = '1307299081676263444'; // Support role
-const TICKET_CATEGORY_ID = 'YOUR_CATEGORY_ID_HERE'; // Ticket category
+const SUPPORT_ROLE_ID = '1307299081676263444'; // Support role ID
+const TICKET_CATEGORY_ID = 'YOUR_CATEGORY_ID_HERE'; // Ticket category ID
 
 // === CLIENT ===
 const client = new Client({
@@ -14,11 +15,11 @@ const client = new Client({
     ],
 });
 
-// === READY EVENT ===
+// === READY EVENT & REGISTER GUILD SLASH COMMANDS ===
 client.once(Events.ClientReady, async () => {
     console.log(`Logged in as ${client.user.tag}`);
 
-    // Register slash commands globally or to a guild for testing
+    // Define slash command
     const commands = [
         new SlashCommandBuilder()
             .setName('sendpanel')
@@ -33,14 +34,14 @@ client.once(Events.ClientReady, async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
     try {
-        console.log('Refreshing slash commands...');
+        console.log('Registering guild commands...');
         await rest.put(
-            Routes.applicationCommands(process.env.CLIENT_ID),
+            Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
             { body: commands }
         );
-        console.log('Slash commands registered.');
+        console.log('✅ Guild commands registered successfully!');
     } catch (error) {
-        console.error(error);
+        console.error('Error registering commands:', error);
     }
 });
 
@@ -48,7 +49,6 @@ client.once(Events.ClientReady, async () => {
 client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
 
-    // Old commands
     if (message.content.toLowerCase() === 'ping') {
         message.channel.send('Pong!');
     }
@@ -58,7 +58,7 @@ client.on(Events.MessageCreate, async (message) => {
     }
 });
 
-// === SLASH COMMANDS ===
+// === SLASH COMMAND HANDLER ===
 client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isChatInputCommand()) {
         if (interaction.commandName === 'sendpanel') {
@@ -83,7 +83,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 });
 
-// === BUTTONS INTERACTION ===
+// === BUTTON HANDLER ===
 client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isButton()) return;
 
