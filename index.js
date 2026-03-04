@@ -1,4 +1,3 @@
-// index.js
 const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Events, PermissionsBitField, REST, Routes, SlashCommandBuilder } = require('discord.js');
 require('dotenv').config();
 
@@ -19,7 +18,7 @@ const client = new Client({
 client.once(Events.ClientReady, async () => {
     console.log(`Logged in as ${client.user.tag}`);
 
-    // Define slash command
+    // Slash command
     const commands = [
         new SlashCommandBuilder()
             .setName('sendpanel')
@@ -89,25 +88,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     const { customId, guild, user } = interaction;
 
-    // CREATE TICKET
+    // === CREATE TICKET ===
     if (customId === 'create_ticket') {
+        await interaction.deferReply({ ephemeral: true });
+
         const ticketChannel = await guild.channels.create({
             name: `ticket-${user.username}`,
             type: 0,
             parent: TICKET_CATEGORY_ID,
             permissionOverwrites: [
-                {
-                    id: guild.id,
-                    deny: [PermissionsBitField.Flags.ViewChannel],
-                },
-                {
-                    id: user.id,
-                    allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
-                },
-                {
-                    id: SUPPORT_ROLE_ID,
-                    allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
-                },
+                { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+                { id: SUPPORT_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
             ],
         });
 
@@ -122,68 +114,51 @@ client.on(Events.InteractionCreate, async (interaction) => {
             .setFooter({ text: 'Use the buttons below to claim or close this ticket' });
 
         const ticketButtons = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('claim_ticket')
-                .setLabel('Claim')
-                .setStyle(ButtonStyle.Success)
-                .setEmoji('✅'),
-            new ButtonBuilder()
-                .setCustomId('close_ticket')
-                .setLabel('Close')
-                .setStyle(ButtonStyle.Danger)
-                .setEmoji('🔒')
+            new ButtonBuilder().setCustomId('claim_ticket').setLabel('Claim').setStyle(ButtonStyle.Success).setEmoji('✅'),
+            new ButtonBuilder().setCustomId('close_ticket').setLabel('Close').setStyle(ButtonStyle.Danger).setEmoji('🔒')
         );
 
         await ticketChannel.send({ content: `<@&${SUPPORT_ROLE_ID}>`, embeds: [ticketEmbed], components: [ticketButtons] });
-        await interaction.reply({ content: `🎫 Your ticket has been created: ${ticketChannel}`, ephemeral: true });
+
+        await interaction.editReply({ content: `🎫 Your ticket has been created: ${ticketChannel}` });
     }
 
-    // CLAIM TICKET
+    // === CLAIM TICKET ===
     if (customId === 'claim_ticket') {
+        await interaction.deferUpdate();
         const embed = EmbedBuilder.from(interaction.message.embeds[0])
             .spliceFields(1, 1, { name: 'Claimed by', value: `<@${user.id}>`, inline: true });
-        await interaction.update({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed] }).catch(() => {
+            interaction.message.edit({ embeds: [embed] });
+        });
     }
 
-    // CLOSE TICKET
+    // === CLOSE TICKET ===
     if (customId === 'close_ticket') {
+        await interaction.deferUpdate();
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('delete_ticket')
-                .setLabel('Delete')
-                .setStyle(ButtonStyle.Danger)
-                .setEmoji('❌'),
-            new ButtonBuilder()
-                .setCustomId('reopen_ticket')
-                .setLabel('Re-open')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('🔓')
+            new ButtonBuilder().setCustomId('delete_ticket').setLabel('Delete').setStyle(ButtonStyle.Danger).setEmoji('❌'),
+            new ButtonBuilder().setCustomId('reopen_ticket').setLabel('Re-open').setStyle(ButtonStyle.Secondary).setEmoji('🔓')
         );
-        await interaction.update({ components: [row], content: 'This ticket is now closed.' });
+        await interaction.message.edit({ components: [row], content: 'This ticket is now closed.' });
     }
 
-    // DELETE TICKET
+    // === DELETE TICKET ===
     if (customId === 'delete_ticket') {
+        await interaction.deferUpdate();
         await interaction.channel.delete();
     }
 
-    // REOPEN TICKET
+    // === REOPEN TICKET ===
     if (customId === 'reopen_ticket') {
+        await interaction.deferUpdate();
         const embed = EmbedBuilder.from(interaction.message.embeds[0])
             .spliceFields(1, 1, { name: 'Claimed by', value: 'Not claimed', inline: true });
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('claim_ticket')
-                .setLabel('Claim')
-                .setStyle(ButtonStyle.Success)
-                .setEmoji('✅'),
-            new ButtonBuilder()
-                .setCustomId('close_ticket')
-                .setLabel('Close')
-                .setStyle(ButtonStyle.Danger)
-                .setEmoji('🔒')
+            new ButtonBuilder().setCustomId('claim_ticket').setLabel('Claim').setStyle(ButtonStyle.Success).setEmoji('✅'),
+            new ButtonBuilder().setCustomId('close_ticket').setLabel('Close').setStyle(ButtonStyle.Danger).setEmoji('🔒')
         );
-        await interaction.update({ embeds: [embed], components: [row], content: `<@&${SUPPORT_ROLE_ID}> Ticket reopened.` });
+        await interaction.message.edit({ embeds: [embed], components: [row], content: `<@&${SUPPORT_ROLE_ID}> Ticket reopened.` });
     }
 });
 
